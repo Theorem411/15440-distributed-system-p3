@@ -4,6 +4,9 @@ package kvclient
 
 import (
 	"fmt"
+	"github.com/cmu440/kvcommon"
+	"net/rpc"
+	"errors"
 )
 
 // Type for client.router.
@@ -34,10 +37,11 @@ type Client struct {
 
 // Returns a client for connecting to the key-value store.
 func NewClient(router QueryRouter) *Client {
-	return &Client{
+	// TODO (3A): implement this! (if needed)
+	cli := &Client{
 		router,
-		// TODO (3A): implement this! (if needed)
 	}
+	return cli
 }
 
 // Send RPCs to type and name "QueryReceiver", defined in kvcommon/rpc_types.go.
@@ -51,7 +55,21 @@ func NewClient(router QueryRouter) *Client {
 // router.NextAddr(), that error is returned instead.
 func (client *Client) Get(key string) (value string, ok bool, err error) {
 	// TODO (3A): implement this!
-	return "", false, fmt.Errorf("Not implemented")
+	rpcSvr := client.router.NextAddr()
+	rpcCli, err := rpc.Dial("tcp", rpcSvr)
+	if err != nil {
+		return "", false, err
+	}
+	args := GetArgs{key}
+	reply:= GetReply{}
+	err = rpc.Call("QueryReceiver.Get", args, &reply)
+	if err != nil {
+		return "", false, err
+	}
+	if !reply.Ok {
+		return "", false, nil
+	}
+	return reply.Value, true, nil
 }
 
 // Returns a map containing all (key, value) pairs whose key starts with prefix,
@@ -61,7 +79,18 @@ func (client *Client) Get(key string) (value string, ok bool, err error) {
 // router.NextAddr(), that error is returned instead.
 func (client *Client) List(prefix string) (entries map[string]string, err error) {
 	// TODO (3A): implement this!
-	return nil, fmt.Errorf("Not implemented")
+	rpcSvr := client.router.NextAddr()
+	rpcCli, err := rpc.Dial("tcp", rpcSvr)
+	if err != nil {
+		return nil, err
+	}
+	args := ListArgs{prefix}
+	reply := ListReply{}
+	err = rpc.Call("QueryReceiver.List", args, &reply)
+	if err != nil {
+		return nil, err
+	}
+	return reply.Entries, nil
 }
 
 // Sets the value associated with key.
@@ -70,7 +99,17 @@ func (client *Client) List(prefix string) (entries map[string]string, err error)
 // router.NextAddr(), that error is returned instead.
 func (client *Client) Put(key string, value string) error {
 	// TODO (3A): implement this!
-	return fmt.Errorf("Not implemented")
+	rpcSvr := client.router.NextAddr()
+	rpcCli, err := rpc.Dial("tcp", rpcSvr)
+	if err != nil {
+		return err
+	}
+	args := PutArgs{key, value}
+	err := rpc.Call("QueryReceiver.Put", args, &PutReply{})
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // OPTIONAL: Closes the client, including all of its RPC clients.
