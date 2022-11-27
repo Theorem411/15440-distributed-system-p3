@@ -4,6 +4,7 @@ package kvserver
 
 import (
 	"fmt"
+	"net/rpc"
 )
 
 // A single server in the key-value store, running some number of
@@ -23,6 +24,8 @@ type Server struct {
 // When starting an ActorSystem, call ActorSystem.OnError(errorHandler).
 // This can help debug server-side errors more easily.
 func errorHandler(err error) {
+	fmt.Println("error: %v", err)
+	debug.PrintStack()
 }
 
 // Starts a server running queryActorCount query actors.
@@ -44,34 +47,42 @@ func errorHandler(err error) {
 // returned instead.
 func NewServer(startPort int, queryActorCount int, remoteDescs []string) (server *Server, desc string, err error) {
 	// TODO (3A, 3B): implement this!
+	system, err := actor.NewActorSystem(startPort)
+	ActorSystem.OnError(errorHandler)
+	if err != nil {
+		return nil, "", err // (3B): change desc to something else
+	} 
+	queryReceivers := new([]*queryReceiver)
+	for i := 1; i <= queryActorCount; i++ {
+		ref := system.StartActor(newQueryActor)
+		receiver := &queryReceiver{startPort + i, ref, system}
+		queryReceivers = append(queryReceivers, receiver)
+		// rcvrToActor 
+	}
 
-	// Tips:
-	// - The "HTTP service" example in the net/rpc docs does not support
-	// multiple RPC servers in the same process. Instead, use the following
-	// template to start RPC servers (adapted from
-	// https://groups.google.com/g/Golang-Nuts/c/JTn3LV_bd5M/m/cMO_DLyHPeUJ ):
-	//
-	//  rpcServer := rpc.NewServer()
-	//  err := rpcServer.RegisterName("QueryReceiver", [*queryReceiver instance])
-	//  ln, err := net.Listen("tcp", ...)
-	//  go func() {
-	//    for {
-	//      conn, err := ln.Accept()
-	//      if err != nil {
-	//        return
-	//      }
-	//      go rpcServer.ServeConn(conn)
-	//    }
-	//  }()
-	//
-	// - To start query actors, call your ActorSystem's
-	// StartActor(newQueryActor), where newQueryActor is defined in ./query_actor.go.
-	// Do this queryActorCount times. (For the checkpoint tests,
-	// queryActorCount will always be 1.)
-	// - remoteDescs and desc: see doc comment above.
-	// For the checkpoint, it is okay to ignore remoteDescs and return "" for desc.
+	rpcServer := rpc.NewServer()
+	err = rpcServer.RegisterName("QueryReceiver", queryReceivers)
+	if err != nil {
+		return nil, "", err
+	}
+	ln, err := net.Listen("tcp", ":"+strconv.Itoa(startPort))
+	if err != nil {
+		return nil, "", err
+	}
+	go func() {
+	for {
+		conn, err := ln.Accept()
+		if err != nil {
+		return
+		}
+		go rpcServer.ServeConn(conn)
+	}
+	}()
+	// Return a new server instance 
+	svr := &Server{
 
-	return nil, "", fmt.Errorf("Not implemented")
+	}
+	return svr, "", nil
 }
 
 // OPTIONAL: Closes the server, including its actor system
@@ -86,4 +97,5 @@ func NewServer(startPort int, queryActorCount int, remoteDescs []string) (server
 // Likewise, you may find it useful to close a partially-started server's
 // resources if there is an error in NewServer.
 func (server *Server) Close() {
+
 }
