@@ -2,9 +2,9 @@ package kvserver
 
 import (
 	"fmt"
-	"net/rpc"
 	"encoding/gob"
 	"github.com/cmu440/actor"
+	"github.com/cmu440/kvcommon"
 )
 
 // Implement your queryActor in this file.
@@ -41,7 +41,7 @@ func (actor *queryActor) OnMessage(message any) error {
 	switch m := message.(type) {
 	case MGet: 
 		key, getCh := m.Key, m.GetCh
-		getReply := &GetReply{}
+		getReply := &kvcommon.GetReply{}
 		if value, ok := actor.kvstore[key]; ok {
 			getReply.Value = value
 			getReply.Ok = true
@@ -57,7 +57,7 @@ func (actor *queryActor) OnMessage(message any) error {
 				entries[k] = v
 			}
 		}
-		listReply := &ListReply{entries}
+		listReply := &kvcommon.ListReply{entries}
 		listCh <- listReply
 	case MPut:
 		key, value := m.Key, m.Value
@@ -72,12 +72,12 @@ func (actor *queryActor) OnMessage(message any) error {
 
 type MGet struct {
 	Key string
-	GetCh chan *GetReply
+	GetCh chan *kvcommon.GetReply
 }
 
 type MList struct {
 	Prefix string 
-	ListCh chan *ListReply
+	ListCh chan *kvcommon.ListReply
 }
 
 type MPut struct {
