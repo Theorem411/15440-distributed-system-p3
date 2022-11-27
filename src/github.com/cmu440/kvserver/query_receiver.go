@@ -16,7 +16,6 @@ import (
 // by its query actor.
 type queryReceiver struct {
 	// TODO (3A): implement this!
-	port 	int
 	ref		*actor.ActorRef
 	system 	*actor.ActorSystem
 }

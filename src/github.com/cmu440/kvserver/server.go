@@ -52,35 +52,29 @@ func NewServer(startPort int, queryActorCount int, remoteDescs []string) (server
 	if err != nil {
 		return nil, "", err // (3B): change desc to something else
 	} 
-	queryReceivers := new([]*queryReceiver)
+	listeners := make([]net.Listener)
 	for i := 1; i <= queryActorCount; i++ {
 		ref := system.StartActor(newQueryActor)
-		receiver := &queryReceiver{startPort + i, ref, system}
-		queryReceivers = append(queryReceivers, receiver)
-		// rcvrToActor 
-	}
-
-	rpcServer := rpc.NewServer()
-	err = rpcServer.RegisterName("QueryReceiver", queryReceivers)
-	if err != nil {
-		return nil, "", err
-	}
-	ln, err := net.Listen("tcp", ":"+strconv.Itoa(startPort))
-	if err != nil {
-		return nil, "", err
-	}
-	go func() {
-	for {
-		conn, err := ln.Accept()
+		receiver := &queryReceiver{ref, system}
+		// for each port = startPort + i, register an rpc svr and starts serving
+		rpcServer := rpc.NewServer()
+		err = rpcServer.RegisterName("QueryReceiver", receiver)
 		if err != nil {
-		return
+			return nil, "", err
 		}
-		go rpcServer.ServeConn(conn)
+		ln, err := net.Listen("tcp", ":"+strconv.Itoa(startPort + i))
+		if err != nil {
+			return nil, "", err
+		}
+		listeners = append(listeners, ln)
+		go serve(rpcServer, ln)
 	}
-	}()
-	// Return a new server instance 
-	svr := &Server{
 
+	// Return a new server instance // state mainly for close purpose
+	svr := &Server{
+		listeners: listeners,
+		system: system,
+		remoteDescs: remoteDescs,
 	}
 	return svr, "", nil
 }
@@ -98,4 +92,15 @@ func NewServer(startPort int, queryActorCount int, remoteDescs []string) (server
 // resources if there is an error in NewServer.
 func (server *Server) Close() {
 
+}
+
+// ============================= helper function ==============================
+func serve(rpcServer *rpc.Server, ln net.Listener) {
+	for {
+		conn, err := ln.Accept() // will be shut down by Close()
+		if err != nil {
+			return
+		}
+		go rpcServer.ServeConn(conn)
+	}
 }

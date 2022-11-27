@@ -15,12 +15,9 @@ import (
 
 func init() {
 	// TODO (3A, 3B): Register message types, e.g.:
-	gob.Register(GetArgs{})
-	gob.Register(GetReply{})
-	gob.Register(ListArgs{})
-	gob.Register(ListReply{})
-	gob.Register(PutArgs{})
-	gob.Register(PutReply{})
+	gob.Register(MGet{})
+	gob.Register(MList{})
+	gob.Register(MPut{})
 }
 
 type queryActor struct {
@@ -34,7 +31,7 @@ func newQueryActor(context *actor.ActorContext) actor.Actor {
 	return &queryActor{
 		context: context,
 		// TODO (3A, 3B): implement this!
-		kvstore: make(map[string]string)
+		kvstore: make(map[string]string),
 	}
 }
 
