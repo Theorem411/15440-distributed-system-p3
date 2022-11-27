@@ -2,6 +2,7 @@ package kvserver
 
 import (
 	"github.com/cmu440/kvcommon"
+	"github.com/cmu440/actor"
 )
 
 // RPC handler implementing the kvcommon.QueryReceiver interface.
@@ -24,7 +25,7 @@ type queryReceiver struct {
 func (rcvr *queryReceiver) Get(args kvcommon.GetArgs, reply *kvcommon.GetReply) error {
 	// TODO (3A): implement this!
 	key := args.Key
-	getCh := make(chan *GetReply)
+	getCh := make(chan *kvcommon.GetReply)
 	rcvr.system.Tell(rcvr.ref, MGet{key, getCh})
 	ans := <-getCh
 	reply.Value, reply.Ok = ans.Value, ans.Ok
@@ -35,7 +36,7 @@ func (rcvr *queryReceiver) Get(args kvcommon.GetArgs, reply *kvcommon.GetReply) 
 func (rcvr *queryReceiver) List(args kvcommon.ListArgs, reply *kvcommon.ListReply) error {
 	// TODO (3A): implement this!
 	prefix := args.Prefix
-	listCh := make(chan *ListReply)
+	listCh := make(chan *kvcommon.ListReply)
 	rcvr.system.Tell(rcvr.ref, MList{prefix, listCh})
 	ans := <-listCh
 	reply.Entries = ans.Entries

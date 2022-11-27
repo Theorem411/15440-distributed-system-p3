@@ -4,7 +4,11 @@ package kvserver
 
 import (
 	"fmt"
+	"net"
 	"net/rpc"
+	"strconv"
+	"runtime/debug"
+	"github.com/cmu440/actor"
 )
 
 // A single server in the key-value store, running some number of
@@ -16,6 +20,9 @@ import (
 // consistent, last-writer-wins strategy.
 type Server struct {
 	// TODO (3A, 3B): implement this!
+	listeners []net.Listener
+	system 	 *actor.ActorSystem
+	remoteDescs []string
 }
 
 // OPTIONAL: Error handler for ActorSystem.OnError.
@@ -48,11 +55,11 @@ func errorHandler(err error) {
 func NewServer(startPort int, queryActorCount int, remoteDescs []string) (server *Server, desc string, err error) {
 	// TODO (3A, 3B): implement this!
 	system, err := actor.NewActorSystem(startPort)
-	ActorSystem.OnError(errorHandler)
+	system.OnError(errorHandler)
 	if err != nil {
 		return nil, "", err // (3B): change desc to something else
 	} 
-	listeners := make([]net.Listener)
+	listeners := make([]net.Listener, 0)
 	for i := 1; i <= queryActorCount; i++ {
 		ref := system.StartActor(newQueryActor)
 		receiver := &queryReceiver{ref, system}

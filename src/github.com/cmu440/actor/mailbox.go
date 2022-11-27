@@ -16,7 +16,7 @@ type Mailbox struct {
 	// instruction ch's
 	pushCh 	chan *list.Element
 	popCh	chan bool
-	popReponse chan *list.Element
+	popResponse chan *list.Element
 	// cls
 	clsCh	chan bool
 }
@@ -28,7 +28,7 @@ func NewMailbox() *Mailbox {
 		mailbox: list.New(),
 		pushCh: make(chan *list.Element), // buffer: 100
 		popCh: make(chan bool), // 100
-		popReponse: make(chan *list.Element),
+		popResponse: make(chan *list.Element),
 		clsCh: make(chan bool),
 	}
 	go mb.mainRoutine()
@@ -46,7 +46,7 @@ func NewMailbox() *Mailbox {
 // wrapper around a marshalled actor message.
 func (mailbox *Mailbox) Push(message any) {
 	// TODO (3A): implement this!
-	mailbox.pushCh <- &list.Element{message}
+	mailbox.pushCh <- &list.Element{Value: message}
 }
 
 // Pops a message from the front of the mailbox's FIFO queue,
@@ -58,11 +58,12 @@ func (mailbox *Mailbox) Push(message any) {
 func (mailbox *Mailbox) Pop() (message any, ok bool) {
 	// TODO (3A): implement this!
 	mailbox.popCh <- true
-	message := <-mailbox.popResponse
-	if message == nil {
+	elem := <-mailbox.popResponse
+	if elem == nil {
 		return nil, false
 	}
-	return message.Value, true
+	message = elem.Value
+	return message, true
 }
 
 // Closes the mailbox, causing future Pop() calls to return (nil, false)
@@ -79,14 +80,14 @@ func (mailbox *Mailbox) Close() {
 //=================== mainRoutine =============================
 func (mailbox *Mailbox) mainRoutine() {
 	popping := false
-	ready := nil
-	for {
+	var ready *list.Element = nil
+ 	for {
 		select {
 		case mssg :=<- mailbox.pushCh:
-			mailbox.mailbox.Pushback(mssg)
+			mailbox.mailbox.PushBack(mssg)
 		case <- mailbox.popCh:
 			popping = true
-		case mailbox.clsCh:
+		case <- mailbox.clsCh:
 			if popping {
 				mailbox.popResponse <- nil
 				popping = false

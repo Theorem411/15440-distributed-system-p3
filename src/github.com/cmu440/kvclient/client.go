@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/cmu440/kvcommon"
 	"net/rpc"
-	"errors"
 )
 
 // Type for client.router.
@@ -56,12 +55,13 @@ func NewClient(router QueryRouter) *Client {
 func (client *Client) Get(key string) (value string, ok bool, err error) {
 	// TODO (3A): implement this!
 	rpcSvr := client.router.NextAddr()
-	rpcCli, err := rpc.Dial("tcp", rpcSvr)
+	_, err = rpc.Dial("tcp", rpcSvr)
 	if err != nil {
+		fmt.Printf("Dummy print")
 		return "", false, err
 	}
-	args := GetArgs{key}
-	reply:= GetReply{}
+	args := kvcommon.GetArgs{key}
+	reply:= kvcommon.GetReply{}
 	err = rpc.Call("QueryReceiver.Get", args, &reply)
 	if err != nil {
 		return "", false, err
@@ -80,12 +80,12 @@ func (client *Client) Get(key string) (value string, ok bool, err error) {
 func (client *Client) List(prefix string) (entries map[string]string, err error) {
 	// TODO (3A): implement this!
 	rpcSvr := client.router.NextAddr()
-	rpcCli, err := rpc.Dial("tcp", rpcSvr)
+	_, err = rpc.Dial("tcp", rpcSvr) // what does Dial return?
 	if err != nil {
 		return nil, err
 	}
-	args := ListArgs{prefix}
-	reply := ListReply{}
+	args := kvcommon.ListArgs{prefix}
+	reply := kvcommon.ListReply{}
 	err = rpc.Call("QueryReceiver.List", args, &reply)
 	if err != nil {
 		return nil, err
@@ -100,12 +100,12 @@ func (client *Client) List(prefix string) (entries map[string]string, err error)
 func (client *Client) Put(key string, value string) error {
 	// TODO (3A): implement this!
 	rpcSvr := client.router.NextAddr()
-	rpcCli, err := rpc.Dial("tcp", rpcSvr)
+	_, err := rpc.Dial("tcp", rpcSvr)
 	if err != nil {
 		return err
 	}
-	args := PutArgs{key, value}
-	err := rpc.Call("QueryReceiver.Put", args, &PutReply{})
+	args := kvcommon.PutArgs{key, value}
+	err = rpc.Call("QueryReceiver.Put", args, &kvcommon.PutReply{})
 	if err != nil {
 		return err
 	}
