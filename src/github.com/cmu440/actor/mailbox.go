@@ -2,7 +2,9 @@ package actor
 
 import (
 	"container/list"
+	// "fmt"
 )
+
 // A mailbox, i.e., a thread-safe unbounded FIFO queue.
 //
 // You can think of Mailbox like a Go channel with an infinite buffer.
@@ -11,25 +13,25 @@ import (
 // we do not expect you to use it, just implement it.
 type Mailbox struct {
 	// TODO (3A): implement this!
-	// FIFO queue  
+	// FIFO queue
 	mailbox *list.List
 	// instruction ch's
-	pushCh 	chan *list.Element
-	popCh	chan bool
+	pushCh      chan *list.Element
+	popCh       chan bool
 	popResponse chan *list.Element
 	// cls
-	clsCh	chan bool
+	clsCh chan bool // for mainroutine
 }
 
 // Returns a new mailbox that is ready for use.
 func NewMailbox() *Mailbox {
 	// TODO (3A): implement this!
 	mb := &Mailbox{
-		mailbox: list.New(),
-		pushCh: make(chan *list.Element), // buffer: 100
-		popCh: make(chan bool), // 100
+		mailbox:     list.New(),
+		pushCh:      make(chan *list.Element), // buffer: 100
+		popCh:       make(chan bool),          // 100
 		popResponse: make(chan *list.Element),
-		clsCh: make(chan bool),
+		clsCh:       make(chan bool),
 	}
 	go mb.mainRoutine()
 	return mb
@@ -46,7 +48,12 @@ func NewMailbox() *Mailbox {
 // wrapper around a marshalled actor message.
 func (mailbox *Mailbox) Push(message any) {
 	// TODO (3A): implement this!
-	mailbox.pushCh <- &list.Element{Value: message}
+	select {
+	case <-mailbox.clsCh: // if Close is called, will receive garbage without block
+		return
+	case mailbox.pushCh <- &list.Element{Value: message}:
+		return
+	}
 }
 
 // Pops a message from the front of the mailbox's FIFO queue,
@@ -57,13 +64,20 @@ func (mailbox *Mailbox) Push(message any) {
 // (message, true).
 func (mailbox *Mailbox) Pop() (message any, ok bool) {
 	// TODO (3A): implement this!
-	mailbox.popCh <- true
-	elem := <-mailbox.popResponse
-	if elem == nil {
+	select {
+	case <-mailbox.clsCh:
 		return nil, false
+	default:
+		mailbox.popCh <- true
+		elem := <-mailbox.popResponse
+		if elem == nil {
+			// fmt.Printf("Pop after Close!\n")
+			return nil, false
+		}
+		message = elem.Value
+		// fmt.Printf("")
+		return message, true
 	}
-	message = elem.Value
-	return message, true
 }
 
 // Closes the mailbox, causing future Pop() calls to return (nil, false)
@@ -74,25 +88,29 @@ func (mailbox *Mailbox) Pop() (message any, ok bool) {
 func (mailbox *Mailbox) Close() {
 	// TODO (3A): implement this!
 	mailbox.clsCh <- true
+	close(mailbox.clsCh) // after this point any clsCh waiters will be unblocked
+	// fmt.Printf("Close called!\n")
 }
-
 
 //=================== mainRoutine =============================
 func (mailbox *Mailbox) mainRoutine() {
 	popping := false
 	var ready *list.Element = nil
- 	for {
+	for {
 		select {
-		case mssg :=<- mailbox.pushCh:
-			mailbox.mailbox.PushBack(mssg)
-		case <- mailbox.popCh:
+		case mssg := <-mailbox.pushCh:
+			mailbox.mailbox.PushBack(mssg.Value)
+		case <-mailbox.popCh:
 			popping = true
-		case <- mailbox.clsCh:
+		case <-mailbox.clsCh:
+			// fmt.Printf("Close received\n")
 			if popping {
 				mailbox.popResponse <- nil
 				popping = false
+				// fmt.Printf("Close inform impending Pop to stop!\n")
 			}
-			return  // terminate mainRoutine
+			// fmt.Printf("Close closed mainroutine!\n")
+			return // terminate mainRoutine
 		}
 		// popping handling
 		if popping {
