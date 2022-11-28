@@ -1,8 +1,8 @@
 package kvserver
 
 import (
-	"fmt"
 	"encoding/gob"
+	"fmt"
 	"github.com/cmu440/actor"
 	"github.com/cmu440/kvcommon"
 )
@@ -18,6 +18,9 @@ func init() {
 	gob.Register(MGet{})
 	gob.Register(MList{})
 	gob.Register(MPut{})
+	gob.Register(kvcommon.GetReply{})
+	gob.Register(kvcommon.ListReply{})
+	gob.Register(kvcommon.PutReply{})
 }
 
 type queryActor struct {
@@ -39,29 +42,32 @@ func newQueryActor(context *actor.ActorContext) actor.Actor {
 func (actor *queryActor) OnMessage(message any) error {
 	// TODO (3A, 3B): implement this!
 	switch m := message.(type) {
-	case MGet: 
-		key, getCh := m.Key, m.GetCh
-		getReply := &kvcommon.GetReply{}
+	case MGet:
+		fmt.Printf("Actor received client.Get!\n")
+		key := m.Key
+		getReply := kvcommon.GetReply{}
 		if value, ok := actor.kvstore[key]; ok {
 			getReply.Value = value
 			getReply.Ok = true
 		} else {
 			getReply.Ok = false
 		}
-		getCh <- getReply
+		actor.context.Tell(m.Sender, getReply)
+		fmt.Printf("Actor answered client.Get!\n")
 	case MList:
-		pref, listCh := m.Prefix, m.ListCh
+		pref := m.Prefix
 		entries := make(map[string]string)
 		for k, v := range actor.kvstore {
 			if isPrefix(pref, k) {
 				entries[k] = v
 			}
 		}
-		listReply := &kvcommon.ListReply{entries}
-		listCh <- listReply
+		listReply := kvcommon.ListReply{entries}
+		actor.context.Tell(m.Sender, listReply)
 	case MPut:
 		key, value := m.Key, m.Value
 		actor.kvstore[key] = value
+		actor.context.Tell(m.Sender, kvcommon.PutReply{})
 	default:
 		return fmt.Errorf("Unexpected queryActor message type: %T", m)
 	}
@@ -71,18 +77,19 @@ func (actor *queryActor) OnMessage(message any) error {
 // ======================== actor message types ==============
 
 type MGet struct {
-	Key string
-	GetCh chan *kvcommon.GetReply
+	Key    string
+	Sender *actor.ActorRef
 }
 
 type MList struct {
-	Prefix string 
-	ListCh chan *kvcommon.ListReply
+	Prefix string
+	Sender *actor.ActorRef
 }
 
 type MPut struct {
-	Key	  string
-	Value string
+	Key    string
+	Value  string
+	Sender *actor.ActorRef
 }
 
 // ==================== Helper functions ======================
