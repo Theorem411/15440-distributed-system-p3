@@ -43,7 +43,7 @@ func (actor *queryActor) OnMessage(message any) error {
 	// TODO (3A, 3B): implement this!
 	switch m := message.(type) {
 	case MGet:
-		fmt.Printf("Actor received client.Get!\n")
+		// fmt.Printf("Actor received client.Get!\n")
 		key := m.Key
 		getReply := kvcommon.GetReply{}
 		if value, ok := actor.kvstore[key]; ok {
@@ -53,7 +53,7 @@ func (actor *queryActor) OnMessage(message any) error {
 			getReply.Ok = false
 		}
 		actor.context.Tell(m.Sender, getReply)
-		fmt.Printf("Actor answered client.Get!\n")
+		// fmt.Printf("Actor answered client.Get!\n")
 	case MList:
 		pref := m.Prefix
 		entries := make(map[string]string)
