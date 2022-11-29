@@ -3,7 +3,7 @@
 package kvserver
 
 import (
-	"fmt"
+	// "fmt"
 	"github.com/cmu440/actor"
 	"net"
 	"net/rpc"
@@ -31,7 +31,7 @@ type Server struct {
 // When starting an ActorSystem, call ActorSystem.OnError(errorHandler).
 // This can help debug server-side errors more easily.
 func errorHandler(err error) {
-	fmt.Println("error: %v", err)
+	// fmt.Println("error: %v", err)
 	debug.PrintStack()
 }
 
@@ -56,25 +56,25 @@ func NewServer(startPort int, queryActorCount int, remoteDescs []string) (server
 	// TODO (3A, 3B): implement this!
 	system, err := actor.NewActorSystem(startPort)
 	system.OnError(errorHandler)
-	fmt.Printf("NewActorSystem succeed!\n")
+	// fmt.Printf("NewActorSystem succeed!\n")
 	if err != nil {
 		return nil, "", err // (3B): change desc to something else
 	}
 	listeners := make([]net.Listener, 0)
 	for i := 1; i <= queryActorCount; i++ {
 		ref := system.StartActor(newQueryActor)
-		fmt.Printf("StartActor %v succeed!\n", i)
+		// fmt.Printf("StartActor %v succeed!\n", i)
 		receiver := &queryReceiver{ref, system}
 		// for each port = startPort + i, register an rpc svr and starts serving
 		rpcServer := rpc.NewServer()
-		fmt.Printf("rpc.NewServer succeed!\n")
+		// fmt.Printf("rpc.NewServer succeed!\n")
 		err = rpcServer.RegisterName("QueryReceiver", receiver)
-		fmt.Printf("rpcServer.RegisterName succeed!\n")
+		// fmt.Printf("rpcServer.RegisterName succeed!\n")
 		if err != nil {
 			return nil, "", err
 		}
 		ln, err := net.Listen("tcp", ":"+strconv.Itoa(startPort+i))
-		fmt.Printf("net.Listen succeed!\n")
+		// fmt.Printf("net.Listen succeed!\n")
 		if err != nil {
 			return nil, "", err
 		}
@@ -88,7 +88,7 @@ func NewServer(startPort int, queryActorCount int, remoteDescs []string) (server
 		system:      system,
 		remoteDescs: remoteDescs,
 	}
-	fmt.Printf("NewServer finished!\n")
+	// fmt.Printf("NewServer finished!\n")
 	return svr, "", nil
 }
 
@@ -111,7 +111,7 @@ func (server *Server) Close() {
 func serve(rpcServer *rpc.Server, ln net.Listener) {
 	for {
 		conn, err := ln.Accept() // will be shut down by Close()
-		fmt.Printf("ln.Accept succeed!\n")
+		// fmt.Printf("ln.Accept succeed!\n")
 		if err != nil {
 			return
 		}

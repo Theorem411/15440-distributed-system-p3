@@ -1,7 +1,7 @@
 package kvserver
 
 import (
-	"fmt"
+	// "fmt"
 	"github.com/cmu440/actor"
 	"github.com/cmu440/kvcommon"
 )
@@ -25,14 +25,13 @@ type queryReceiver struct {
 // Get implements kvcommon.QueryReceiver.Get.
 func (rcvr *queryReceiver) Get(args kvcommon.GetArgs, reply *kvcommon.GetReply) error {
 	// TODO (3A): implement this!
-	fmt.Printf("Receiver: client.Get called with args:%v\n", args)
+	// fmt.Printf("Receiver: client.Get called with args:%v\n", args)
 	key := args.Key
-	// getCh := make(chan *kvcommon.GetReply)
 	chanRef, respCh := rcvr.system.NewChannelRef() // chanRef
 	rcvr.system.Tell(rcvr.ref, MGet{key, chanRef})
-	fmt.Printf("Receiver: client.Get system.Tell succeeded!\n")
+	// fmt.Printf("Receiver: client.Get system.Tell succeeded!\n")
 	ans := (<-respCh).(kvcommon.GetReply)
-	fmt.Printf("Receiver: client.Get answer received!\n")
+	// fmt.Printf("Receiver: client.Get answer received!\n")
 	reply.Value, reply.Ok = ans.Value, ans.Ok
 	return nil
 }
@@ -40,14 +39,13 @@ func (rcvr *queryReceiver) Get(args kvcommon.GetArgs, reply *kvcommon.GetReply) 
 // List implements kvcommon.QueryReceiver.List.
 func (rcvr *queryReceiver) List(args kvcommon.ListArgs, reply *kvcommon.ListReply) error {
 	// TODO (3A): implement this!
-	fmt.Printf("Receiver: client.List called with args:%v:%v\n", args)
+	// fmt.Printf("Receiver: client.List called with args:%v:%v\n", args)
 	prefix := args.Prefix
-	// listCh := make(chan *kvcommon.ListReply)
 	chanRef, respCh := rcvr.system.NewChannelRef()
 	rcvr.system.Tell(rcvr.ref, MList{prefix, chanRef})
-	fmt.Printf("Receiver: client.List system.Tell succeeded!\n")
+	// fmt.Printf("Receiver: client.List system.Tell succeeded!\n")
 	ans := (<-respCh).(kvcommon.ListReply)
-	fmt.Printf("Receiver: client.List answer received!\n")
+	// fmt.Printf("Receiver: client.List answer received!\n")
 	reply.Entries = ans.Entries
 	return nil
 }
@@ -59,6 +57,5 @@ func (rcvr *queryReceiver) Put(args kvcommon.PutArgs, reply *kvcommon.PutReply) 
 	chanRef, respCh := rcvr.system.NewChannelRef()
 	rcvr.system.Tell(rcvr.ref, MPut{key, value, chanRef})
 	*reply = (<-respCh).(kvcommon.PutReply)
-	// *reply = kvcommon.PutReply{}
 	return nil
 }

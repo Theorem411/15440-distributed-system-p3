@@ -3,7 +3,7 @@
 package kvclient
 
 import (
-	"fmt"
+	// "fmt"
 	"github.com/cmu440/kvcommon"
 	"net/rpc"
 )
@@ -57,7 +57,7 @@ func (client *Client) Get(key string) (value string, ok bool, err error) {
 	rpcSvr := client.router.NextAddr()
 	rpcCli, err := rpc.Dial("tcp", rpcSvr)
 	if err != nil {
-		fmt.Printf("Dummy print")
+		// fmt.Printf("Dummy print")
 		return "", false, err
 	}
 	args := kvcommon.GetArgs{key}
