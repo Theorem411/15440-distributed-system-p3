@@ -3,7 +3,7 @@
 package kvserver
 
 import (
-	// "fmt"
+	"fmt"
 	"github.com/cmu440/actor"
 	"net"
 	"net/rpc"
@@ -31,7 +31,7 @@ type Server struct {
 // When starting an ActorSystem, call ActorSystem.OnError(errorHandler).
 // This can help debug server-side errors more easily.
 func errorHandler(err error) {
-	// fmt.Println("error: %v", err)
+	fmt.Println("error: %v", err)
 	debug.PrintStack()
 }
 
@@ -56,39 +56,39 @@ func NewServer(startPort int, queryActorCount int, remoteDescs []string) (server
 	// TODO (3A, 3B): implement this!
 	system, err := actor.NewActorSystem(startPort)
 	system.OnError(errorHandler)
-	// fmt.Printf("NewActorSystem succeed!\n")
 	if err != nil {
 		return nil, "", err // (3B): change desc to something else
 	}
 	listeners := make([]net.Listener, 0)
+	peerActors := make([]*actor.ActorRef, 0)
 	for i := 1; i <= queryActorCount; i++ {
 		ref := system.StartActor(newQueryActor)
-		// fmt.Printf("StartActor %v succeed!\n", i)
 		receiver := &queryReceiver{ref, system}
 		// for each port = startPort + i, register an rpc svr and starts serving
 		rpcServer := rpc.NewServer()
-		// fmt.Printf("rpc.NewServer succeed!\n")
 		err = rpcServer.RegisterName("QueryReceiver", receiver)
-		// fmt.Printf("rpcServer.RegisterName succeed!\n")
 		if err != nil {
 			return nil, "", err
 		}
 		ln, err := net.Listen("tcp", ":"+strconv.Itoa(startPort+i))
-		// fmt.Printf("net.Listen succeed!\n")
 		if err != nil {
 			return nil, "", err
 		}
 		listeners = append(listeners, ln)
+		peerActors = append(peerActors, ref)
 		go serve(rpcServer, ln)
 	}
-
+	// inform all local actors of each other's presence  // MInit send
+	system.NewChannelRef()
+	for ref := range peerActors {
+		system.Tell(ref, MInit{ref, peerActors})
+	}
 	// Return a new server instance // state mainly for close purpose
 	svr := &Server{
-		listeners:   listeners,
+		listeners:   listeners, // for Close
 		system:      system,
 		remoteDescs: remoteDescs,
 	}
-	// fmt.Printf("NewServer finished!\n")
 	return svr, "", nil
 }
 
