@@ -1,7 +1,6 @@
 package actor
 
 import (
-	"fmt"
 	"net/rpc"
 )
 
@@ -15,7 +14,9 @@ import (
 // concurrently with the same ref.Address).
 func remoteTell(client *rpc.Client, ref *ActorRef, mars []byte) {
 	// TODO (3B): implement this!
-	fmt.Println("remoteTell not implemented")
+	args := RTellArgs{ref, mars}
+	reply := &RTellReply{}
+	client.Go("RemoteTeller.RTell", args, reply, nil)
 }
 
 // Registers an RPC handler on server for remoteTell calls to system.
@@ -25,7 +26,29 @@ func remoteTell(client *rpc.Client, ref *ActorRef, mars []byte) {
 // system.tellFromRemote(ref, mars).
 func registerRemoteTells(system *ActorSystem, server *rpc.Server) error {
 	// TODO (3B): implement this!
+	rt := &RemoteTeller{system}
+	err := server.RegisterName("RemoteTeller", rt)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
-// TODO (3B): implement your remoteTell RPC handler below!
+// TODO (3B): implement your remoteTell RPC handler below
+type RemoteTeller struct {
+	System	*ActorSystem
+}
+
+type RTellArgs struct {
+	Ref 	*ActorRef
+	Mars 	[]byte
+}
+
+type RTellReply struct {
+}
+
+func (rt *RemoteTeller) RTell(args RTellArgs, reply *RTellArgs) error {
+	ref, mars := args.Ref, args.Mars
+	rt.System.tellFromRemote(ref, mars)
+	return nil
+}

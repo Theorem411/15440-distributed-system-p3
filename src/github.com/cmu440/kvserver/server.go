@@ -3,7 +3,7 @@
 package kvserver
 
 import (
-	// "fmt"
+	"fmt"
 	"github.com/cmu440/actor"
 	"net"
 	"net/rpc"
@@ -31,7 +31,7 @@ type Server struct {
 // When starting an ActorSystem, call ActorSystem.OnError(errorHandler).
 // This can help debug server-side errors more easily.
 func errorHandler(err error) {
-	// fmt.Println("error: %v", err)
+	fmt.Println("error: %v", err)
 	debug.PrintStack()
 }
 
@@ -55,40 +55,32 @@ func errorHandler(err error) {
 func NewServer(startPort int, queryActorCount int, remoteDescs []string) (server *Server, desc string, err error) {
 	// TODO (3A, 3B): implement this!
 	system, err := actor.NewActorSystem(startPort)
-	system.OnError(errorHandler)
-	// fmt.Printf("NewActorSystem succeed!\n")
+	// system.OnError(errorHandler)
 	if err != nil {
 		return nil, "", err // (3B): change desc to something else
 	}
 	listeners := make([]net.Listener, 0)
+	peerActors := make([]*actor.ActorRef, 0)
 	for i := 1; i <= queryActorCount; i++ {
 		ref := system.StartActor(newQueryActor)
-		// fmt.Printf("StartActor %v succeed!\n", i)
 		receiver := &queryReceiver{ref, system}
 		// for each port = startPort + i, register an rpc svr and starts serving
-		rpcServer := rpc.NewServer()
-		// fmt.Printf("rpc.NewServer succeed!\n")
-		err = rpcServer.RegisterName("QueryReceiver", receiver)
-		// fmt.Printf("rpcServer.RegisterName succeed!\n")
+		ln, err := registerReceiver(receiver, startPort+i)
 		if err != nil {
 			return nil, "", err
 		}
-		ln, err := net.Listen("tcp", ":"+strconv.Itoa(startPort+i))
-		// fmt.Printf("net.Listen succeed!\n")
-		if err != nil {
-			return nil, "", err
-		}
+		// collect actorRefs and listeners
 		listeners = append(listeners, ln)
-		go serve(rpcServer, ln)
+		peerActors = append(peerActors, ref)
 	}
-
+	// Send the only MInit and the first-ever MInitSynch 
+	broadcastInit(system, peerActors)
 	// Return a new server instance // state mainly for close purpose
 	svr := &Server{
 		listeners:   listeners,
 		system:      system,
 		remoteDescs: remoteDescs,
 	}
-	// fmt.Printf("NewServer finished!\n")
 	return svr, "", nil
 }
 
@@ -104,17 +96,43 @@ func NewServer(startPort int, queryActorCount int, remoteDescs []string) (server
 // Likewise, you may find it useful to close a partially-started server's
 // resources if there is an error in NewServer.
 func (server *Server) Close() {
-
+	server.system.Close()
+	// for ln := range server.listeners {
+	// 	ln.Close()
+	// }
 }
 
 // ============================= helper function ==============================
 func serve(rpcServer *rpc.Server, ln net.Listener) {
 	for {
 		conn, err := ln.Accept() // will be shut down by Close()
-		// fmt.Printf("ln.Accept succeed!\n")
 		if err != nil {
 			return
 		}
 		go rpcServer.ServeConn(conn)
 	}
 }
+
+func registerReceiver(receiver *queryReceiver, port int) (net.Listener, error) {
+	rpcServer := rpc.NewServer()
+	err := rpcServer.RegisterName("QueryReceiver", receiver)
+	if err != nil {
+		return nil, err
+	}
+	ln, err := net.Listen("tcp", ":"+strconv.Itoa(port))
+	if err != nil {
+		return ln, err
+	}
+	go serve(rpcServer, ln)
+	return ln, nil
+}
+
+func broadcastInit(system *actor.ActorSystem, peerActors []*actor.ActorRef) {
+	// system.NewChannelRef() // no need to answ
+	for _, ref := range peerActors {
+		fmt.Printf("init actor %v\n", ref.Counter)
+		system.Tell(ref, MInit{ref, peerActors})
+		system.Tell(ref, MSynchInit{})
+	}
+}
+

@@ -142,40 +142,39 @@ func testSingleGet(t *testing.T, client *kvclient.Client, server *simServer, don
 		call.replyCh <- kvcommon.GetReply{"bar", true}
 	}()
 
-	go func() {
-		defer func() {
-			doneCh <- true
-		}()
-
-		t.Log("Calling client.Get(\"foo\")")
-		value, ok, err := client.Get("foo")
-		if err != nil {
-			t.Errorf("Get returned error: %s", err)
-			return
-		}
-		if !ok {
-			t.Errorf("Get returned ok=false but expected value \"bar\"")
-			return
-		}
-		if value != "bar" {
-			t.Errorf("Get returned incorrect value %q (expected \"bar\")", value)
-		}
-
-		t.Log("Checking that server was used")
-		select {
-		case <-respondedCh:
-		default:
-			t.Errorf("RPC server not used")
-		}
-
-		t.Log("Checking that there was only one RPC")
-		timer := time.After(time.Millisecond)
-		select {
-		case <-server.callCh:
-			t.Errorf("Unexpected second RPC")
-		case <-timer:
-		}
+	defer func() {
+		doneCh <- true
 	}()
+
+	t.Log("Calling client.Get(\"foo\")")
+	value, ok, err := client.Get("foo")
+	if err != nil {
+		t.Errorf("Get returned error: %s", err)
+		return
+	}
+	if !ok {
+		t.Errorf("Get returned ok=false but expected value \"bar\"")
+		return
+	}
+	if value != "bar" {
+		t.Errorf("Get returned incorrect value %q (expected \"bar\")", value)
+	}
+
+	t.Log("Checking that server was used")
+	select {
+	case <-respondedCh:
+	default:
+		t.Errorf("RPC server not used")
+	}
+
+	t.Log("Checking that there was only one RPC")
+	timer := time.After(time.Millisecond)
+	select {
+	case <-server.callCh:
+		t.Errorf("Unexpected second RPC")
+	case <-timer:
+	}
+
 }
 
 // === Tests
@@ -379,7 +378,7 @@ func TestClientPut(t *testing.T) {
 }
 
 func TestClientBalance(t *testing.T) {
-	fmt.Printf("=== %s: %s\n", t.Name(), "Call client.Get with multiple RPC servers")
+	fmt.Printf("=== %s: %s\n", t.Name(), "Call client.Get with multiple reference RPC servers")
 
 	serverNum := 3
 
@@ -496,8 +495,9 @@ func TestClientConcurrent(t *testing.T) {
 
 	msgTimeout := time.Duration(4) * time.Second
 	msgTimeoutCh := time.After(msgTimeout)
+	numQ := 3
 
-	numQ := 2
+	msgProcessCh := make(chan bool)
 
 	// Respond to the Get call when it comes.
 	respondedCh := make(chan bool, 1)
@@ -526,26 +526,32 @@ func TestClientConcurrent(t *testing.T) {
 			doneCh <- true
 		}()
 		for i := 0; i < numQ; i++ {
-			t.Logf("Calling client.Get(%q)", "foo")
-			value, ok, err := client.Get("foo")
-			if err != nil {
-				t.Errorf("Get returned error: %s", err)
-				return
-			}
-			if !ok {
-				t.Errorf("Get returned ok=false but expected value %q", "bar")
-				return
-			}
-			if value != "bar" {
-				t.Errorf("Get returned incorrect value %q (expected %q)", value, "bar")
-			}
+			go func() {
+				t.Logf("Calling client.Get(%q)", "foo")
+				value, ok, err := client.Get("foo")
+				if err != nil {
+					t.Errorf("Get returned error: %s", err)
+					return
+				}
+				if !ok {
+					t.Errorf("Get returned ok=false but expected value %q", "bar")
+					return
+				}
+				if value != "bar" {
+					t.Errorf("Get returned incorrect value %q (expected %q)", value, "bar")
+				}
+				msgProcessCh <- true
+			}()
+
 		}
 
 		t.Log("Checking queries were handled concurrently")
-		select {
-		case <-msgTimeoutCh:
-			t.Errorf("Quries were processed too slowly")
-		default:
+		for i := 0; i < numQ; i++ {
+			select {
+			case <-msgTimeoutCh:
+				t.Errorf("Client handles Get() too slowly")
+			case <-msgProcessCh:
+			}
 		}
 
 		t.Log("Checking that server was used correct number of times")
