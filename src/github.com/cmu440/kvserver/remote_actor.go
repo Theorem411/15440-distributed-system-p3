@@ -21,6 +21,7 @@ type remoteActor struct {
 	remoteActors 	[]*actor.ActorRef // 
 	synchBuffer		map[string]TimedValue
 	hasRemote		bool
+	hasLocal		bool
 	synchDuration 	time.Duration
 }
 
@@ -32,8 +33,19 @@ func newRemoteActor(context *actor.ActorContext) actor.Actor {
 		remoteActors: make([]*actor.ActorRef, 0), 
 		synchBuffer: make(map[string]TimedValue, 0),
 		hasRemote: false,
+		hasLocal: false,
 		synchDuration: 500 * time.Millisecond,
 	}
+}
+
+// debug function 
+func printActorRefs(actorRefs []*actor.ActorRef) string {
+	res := "["
+	for _, a := range actorRefs {
+		res += fmt.Sprintf("%v:%v, ", a.Address, a.Counter)
+	}
+	res += "]"
+	return res 
 }
 
 func (actor *remoteActor) OnMessage(message any) error {
@@ -43,8 +55,8 @@ func (actor *remoteActor) OnMessage(message any) error {
 		// fmt.Printf("remote actor (%v:%v) gets init'ed with local contact list: %v\n", actor.me.Address, actor.me.Counter, actor.localActors)
 	case MRemoteContact:
 		actor.remoteActors = m.RemoteActors
-		// fmt.Printf("remote actor (%v:%v) gets init'ed with remote contact: %v and remote contact: %v\n", actor.me.Address, actor.me.Counter, actor.remoteActors, actor.localActors)
-	case MSyncInitRemote: // MSyncInitCkpt
+		// fmt.Printf("remote actor (%v:%v) gets init'ed with remote contact: %v and local contact: %v\n", actor.me.Address, actor.me.Counter, printActorRefs(actor.remoteActors), printActorRefs(actor.localActors))
+	case MSyncInitRemote: 
 		actor.context.TellAfter(actor.me, MSyncInitRemote{}, actor.synchDuration)
 		// broadcast current version of buffer to all remote actor
 		err := actor.broadcastUpdate()
@@ -53,6 +65,7 @@ func (actor *remoteActor) OnMessage(message any) error {
 		}
 	case MSyncRecv: // receive update from local actors
 		entries := m.Entries
+		actor.hasLocal = true
 		// LWW-rule of buffers: merge buffers 
 		actor.mergeUpdates(entries)
 	case MSyncRecvRemote: // receive update from remote actors
@@ -97,13 +110,19 @@ func (actor *remoteActor) broadcastUpdate() error {
 	if len(actor.synchBuffer) > 0 {	
 		// fmt.Printf("remote actor (%v:%v) received instruction to send updates\n", actor.me.Address, actor.me.Counter)
 		// fmt.Printf("remote actor (%v:%v) has remote contact list: %v\n", actor.me.Address, actor.me.Counter, actor.remoteActors)
-		for _, ref := range actor.remoteActors {
+		if actor.hasLocal {
+			for _, ref := range actor.remoteActors {
 			// remoteTell(client, ref, mars)
-			// fmt.Printf("remote actor (%v:%v) tells (%v:%v) to update itself with Entries=%v\n", actor.me.Address, actor.me.Counter, ref.Address, ref.Counter, actor.synchBuffer)
-			actor.context.Tell(ref, MSyncRecvRemote{actor.synchBuffer})
+				if actor.me.Address != ref.Address {
+					// fmt.Printf("remote actor (%v:%v) tells remote actor (%v:%v) to update itself with Entries=%v\n", actor.me.Address, actor.me.Counter, ref.Address, ref.Counter, actor.synchBuffer)
+					actor.context.Tell(ref, MSyncRecvRemote{actor.synchBuffer})
+				}
+			}
+			actor.hasLocal = false
 		}
 		if actor.hasRemote {
 			for _, ref := range actor.localActors {
+				// fmt.Printf("remote actor (%v:%v) tells local actor (%v:%v) to update itself with Entries=%v\n", actor.me.Address, actor.me.Counter, ref.Address, ref.Counter, actor.synchBuffer)
 				actor.context.Tell(ref, MSyncRecv{actor.synchBuffer})
 			}
 			actor.hasRemote = false
