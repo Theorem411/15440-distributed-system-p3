@@ -263,6 +263,7 @@ func (system *ActorSystem) runActor(actor Actor, mailbox *Mailbox) {
 	for {
 		mars, ok := mailbox.Pop()
 		if !ok {
+			// fmt.Printf("Actor in system %v is successfully shutdown!\n", system.Address)
 			return
 		}
 		message, err := unmarshal(mars.([]byte))
