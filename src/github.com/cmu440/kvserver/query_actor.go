@@ -20,8 +20,8 @@ func init() {
 	gob.Register(MList{})
 	gob.Register(MPut{})
 	gob.Register(MInit{})
-	gob.Register(MSynchInit{})
-	gob.Register(MSynchRecv{})
+	gob.Register(MSyncInit{})
+	gob.Register(MSyncRecv{})
 	gob.Register(kvcommon.GetReply{})
 	gob.Register(kvcommon.ListReply{})
 	gob.Register(kvcommon.PutReply{})
@@ -31,15 +31,16 @@ type queryActor struct {
 	context *actor.ActorContext
 	// TODO (3A, 3B): implement this!
 	me				*actor.ActorRef
-	localPeers 		[]*actor.ActorRef // every local actors 
-	kvstore 		map[string]*timedValue
-	synchBuffer 	map[string]*timedValue 
+	LocalActors 		[]*actor.ActorRef // every local actors 
+	remoteActor 	*actor.ActorRef
+	kvstore 		map[string]TimedValue
+	synchBuffer 	map[string]TimedValue 
 	synchDuration 	time.Duration
 }
 
-type timedValue struct {
-	timestamp 	time.Time
-	value		string
+type TimedValue struct {
+	TimeStamp 	time.Time
+	Value		string
 }
 
 // "Constructor" for queryActors, used in ActorSystem.StartActor.
@@ -48,9 +49,10 @@ func newQueryActor(context *actor.ActorContext) actor.Actor {
 		context: context,
 		// TODO (3A, 3B): implement this!
 		me: nil,
-		localPeers: make([]*actor.ActorRef, 0),
-		kvstore: make(map[string]*timedValue, 0),
-		synchBuffer: make(map[string]*timedValue, 0),
+		LocalActors: make([]*actor.ActorRef, 0),
+		remoteActor: nil,
+		kvstore: make(map[string]TimedValue, 0),
+		synchBuffer: make(map[string]TimedValue, 0),
 		synchDuration: 200 * time.Millisecond,
 	}
 }
@@ -61,23 +63,24 @@ func (actor *queryActor) OnMessage(message any) error {
 	switch m := message.(type) {
 	case MInit: // should receive exactly once
 		actor.me = m.Me
-		actor.localPeers = m.LocalPeers
-		fmt.Printf("actor %v received localPeers [check: received exactly once]\n", actor.me.Counter)
-	case MSynchInit: // initially sent by NewServer 
+		actor.LocalActors = m.LocalActors
+		actor.remoteActor = m.RemoteActor
+		// fmt.Printf("actor %v received LocalActors {%v, %v} \n", actor.me.Counter, actor.LocalActors[0].Counter, actor.LocalActors[1].Counter)
+	case MSyncInit: // initially sent by NewServer 
 		// if have something interesting to send
-		fmt.Printf("actor %v's current buffer is: %v\n", actor.me.Counter, actor.synchBuffer)
+		// fmt.Printf("actor %v's current buffer is: %v\n", actor.me.Counter, actor.synchBuffer)
 		actor.broadcastUpdates()
 		// successive MInitSynch to itself
-		actor.context.TellAfter(actor.me, MSynchInit{}, actor.synchDuration)
-	case MSynchRecv: 
+		actor.context.TellAfter(actor.me, MSyncInit{}, actor.synchDuration)
+	case MSyncRecv: 
 		entries := m.Entries 
-		fmt.Printf("actor %v received update entries: %v\n", actor.me.Counter, entries)
+		// fmt.Printf("actor %v received update entries: %v\n", actor.me.Counter, entries)
 		actor.mergeUpdates(entries)
 	case MGet:
 		key := m.Key
 		getReply := kvcommon.GetReply{}
 		if tv, ok := actor.kvstore[key]; ok {
-			getReply.Value = tv.value
+			getReply.Value = tv.Value
 			getReply.Ok = true
 		} else {
 			getReply.Ok = false
@@ -88,7 +91,7 @@ func (actor *queryActor) OnMessage(message any) error {
 		entries := make(map[string]string, 0)
 		for k, tv := range actor.kvstore {
 			if isPrefix(pref, k) {
-				entries[k] = tv.value
+				entries[k] = tv.Value
 			}
 		}
 		listReply := kvcommon.ListReply{entries}
@@ -97,13 +100,13 @@ func (actor *queryActor) OnMessage(message any) error {
 		key, value := m.Key, m.Value
 		t := time.Now()
 		// update itself: might cause temporary inconsistency
-		actor.kvstore[key] = &timedValue{t, value}
+		actor.kvstore[key] = TimedValue{t, value}
 		// update buffer
-		actor.synchBuffer[key] = &timedValue{t, value}
+		actor.synchBuffer[key] = TimedValue{t, value}
 		// trivial putreply
 		actor.context.Tell(m.Sender, kvcommon.PutReply{})
 		
-		fmt.Printf("actor %v received Put{k:%v, v:%v}\n", actor.me.Counter, key, value)
+		// fmt.Printf("actor %v received Put{k:%v, v:%v}\n", actor.me.Counter, key, value)
 	default:
 		return fmt.Errorf("Unexpected queryActor message type: %T", m)
 	}
@@ -130,14 +133,15 @@ type MPut struct {
 
 type MInit struct {
 	Me			*actor.ActorRef
-	LocalPeers []*actor.ActorRef
+	LocalActors []*actor.ActorRef
+	RemoteActor *actor.ActorRef
 }
 
-type MSynchInit struct {
+type MSyncInit struct {
 }
 
-type MSynchRecv struct {
-	Entries map[string]*timedValue
+type MSyncRecv struct {
+	Entries map[string]TimedValue
 }
 // ==================== Helper functions ======================
 func isPrefix(prefix string, key string) bool {
@@ -147,15 +151,15 @@ func isPrefix(prefix string, key string) bool {
 	return prefix == key[:len(prefix)]
 }
 
-func (actor *queryActor) mergeUpdates(entries map[string]*timedValue) {
+func (actor *queryActor) mergeUpdates(entries map[string]TimedValue) {
 	for k, tv := range entries {
 		if tvLocal, ok := actor.kvstore[k]; !ok {
 			actor.kvstore[k] = tv
 		} else {
-			t, tLocal := tv.timestamp, tvLocal.timestamp
+			t, tLocal := tv.TimeStamp, tvLocal.TimeStamp
 			if t.After(tLocal) {  // LWW rule
 				actor.kvstore[k] = tv
-				fmt.Printf("actor %v's kvstore entries of key [%v] changed to %v\n", actor.me.Counter, k, tv.value)
+				// fmt.Printf("actor %v's kvstore entries of key [%v] changed to %v\n", actor.me.Counter, k, tv.Value)
 			}
 		}
 	}
@@ -163,12 +167,14 @@ func (actor *queryActor) mergeUpdates(entries map[string]*timedValue) {
 
 func (actor *queryActor) broadcastUpdates() {
 	if len(actor.synchBuffer) > 0 {
-		for _, ref := range actor.localPeers {
+		for _, ref := range actor.LocalActors {
 			if ref.Counter != actor.me.Counter {
-				actor.context.Tell(ref, MSynchRecv{actor.synchBuffer})
-				fmt.Printf("actor %v tell actor %v to update itself\n", actor.me.Counter, ref.Counter)
+				actor.context.Tell(ref, MSyncRecv{actor.synchBuffer})
+				// fmt.Printf("actor %v tell actor %v to update itself with %v\n", actor.me.Counter, ref.Counter, actor.synchBuffer)
 			}
 		}
-		actor.synchBuffer = make(map[string]*timedValue, 0)
+		actor.context.Tell(actor.remoteActor, MSyncRecv{actor.synchBuffer})
+		// fmt.Printf("local actor (%v:%v) tell remote actor (%v:%v) to update itself with %v\n", actor.me.Address, actor.me.Counter, actor.remoteActor.Address, actor.remoteActor.Counter, actor.synchBuffer)
+		actor.synchBuffer = make(map[string]TimedValue, 0)
 	}
 }

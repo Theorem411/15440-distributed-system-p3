@@ -1,0 +1,30 @@
+=== TestLocalSyncSize1: 2 actors: Put on one actor, Get on all w/ size increase limit
+--- FAIL: TestLocalSyncSize1 (3.92s)
+    utils.go:77: Starting server with ActorSystem on port 12025 and 2 query actors on ports 12026-12027
+    local_sync_test.go:149: Round 1
+    query_wrappers.go:13: (actor 0) Calling client.Put("toppingr1", "cheese")
+    query_wrappers.go:13: (actor 0) Put("toppingr1", "cheese") succeeded
+    utils.go:96: Waiting 500ms for sync
+    query_wrappers.go:13: (actor 0) Calling client.Get("toppingr1")
+    query_wrappers.go:13: (actor 0) Get("toppingr1") returned ("cheese", true)
+    query_wrappers.go:13: (actor 1) Calling client.Get("toppingr1")
+    query_wrappers.go:13: (actor 1) Get("toppingr1") returned ("cheese", true)
+    local_sync_test.go:153: Round 1 bytes: 2683
+    local_sync_test.go:155: Filling with 1,000 entries on client 0
+    utils.go:96: Waiting 500ms for sync
+    local_sync_test.go:164: Checking filler entries on client 1
+    local_sync_test.go:167: Round 2
+    query_wrappers.go:13: (actor 0) Calling client.Put("toppingr2", "cheese")
+    query_wrappers.go:13: (actor 0) Put("toppingr2", "cheese") succeeded
+    utils.go:96: Waiting 500ms for sync
+    query_wrappers.go:13: (actor 0) Calling client.Get("toppingr2")
+    query_wrappers.go:13: (actor 0) Get("toppingr2") returned ("cheese", true)
+    query_wrappers.go:13: (actor 1) Calling client.Get("toppingr2")
+    query_wrappers.go:13: (actor 1) Get("toppingr2") returned ("cheese", true)
+    local_sync_test.go:171: Round 2 bytes: 140731
+    local_sync_test.go:183: Max message rate: 15.60/sec
+    local_sync_test.go:185: Max message rate per sender->receiver pair exceeded: 15.60 > 10.00/sec
+    local_sync_test.go:190: Size increase limit exceeded: 140731 >> 2683
+FAIL
+exit status 1
+FAIL	github.com/cmu440/tests	4.035s
