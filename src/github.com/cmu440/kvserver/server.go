@@ -9,6 +9,7 @@ import (
 	"net/rpc"
 	"runtime/debug"
 	"strconv"
+	"encoding/json"
 )
 
 // A single server in the key-value store, running some number of
@@ -22,7 +23,6 @@ type Server struct {
 	// TODO (3A, 3B): implement this!
 	listeners   []net.Listener
 	system      *actor.ActorSystem
-	remoteDescs []string
 }
 
 // OPTIONAL: Error handler for ActorSystem.OnError.
@@ -55,10 +55,11 @@ func errorHandler(err error) {
 func NewServer(startPort int, queryActorCount int, remoteDescs []string) (server *Server, desc string, err error) {
 	// TODO (3A, 3B): implement this!
 	system, err := actor.NewActorSystem(startPort)
-	// system.OnError(errorHandler)
+	system.OnError(errorHandler)
 	if err != nil {
 		return nil, "", err // (3B): change desc to something else
 	}
+	// create local syncing actors
 	listeners := make([]net.Listener, 0)
 	peerActors := make([]*actor.ActorRef, 0)
 	for i := 1; i <= queryActorCount; i++ {
@@ -73,15 +74,31 @@ func NewServer(startPort int, queryActorCount int, remoteDescs []string) (server
 		listeners = append(listeners, ln)
 		peerActors = append(peerActors, ref)
 	}
+	// create a remote actor 
+	remoteRef := system.StartActor(newRemoteActor)
+	remoteActors := make([]*actor.ActorRef, 0)
+	for _, remoteDesc := range remoteDescs {
+		var remoteActor actor.ActorRef
+		err := json.Unmarshal([]byte(remoteDesc), &remoteActor)
+		if err != nil {
+			return nil, "", err
+		}
+		remoteActors = append(remoteActors, &remoteActor)
+	}
+	remoteActors = append(remoteActors, remoteRef)
+	descByte, err := json.Marshal(remoteRef)
+	if err != nil {
+		return nil, "", err
+	}
+	desc = string(descByte)
 	// Send the only MInit and the first-ever MInitSynch 
-	broadcastInit(system, peerActors)
+	broadcastInit(system, peerActors, remoteRef, remoteActors)
 	// Return a new server instance // state mainly for close purpose
 	svr := &Server{
 		listeners:   listeners,
 		system:      system,
-		remoteDescs: remoteDescs,
 	}
-	return svr, "", nil
+	return svr, desc, nil
 }
 
 // OPTIONAL: Closes the server, including its actor system
@@ -97,9 +114,9 @@ func NewServer(startPort int, queryActorCount int, remoteDescs []string) (server
 // resources if there is an error in NewServer.
 func (server *Server) Close() {
 	server.system.Close()
-	// for ln := range server.listeners {
-	// 	ln.Close()
-	// }
+	for _, ln := range server.listeners {
+		ln.Close()
+	}
 }
 
 // ============================= helper function ==============================
@@ -127,12 +144,18 @@ func registerReceiver(receiver *queryReceiver, port int) (net.Listener, error) {
 	return ln, nil
 }
 
-func broadcastInit(system *actor.ActorSystem, peerActors []*actor.ActorRef) {
+func broadcastInit(system *actor.ActorSystem, peerActors []*actor.ActorRef, remoteRef *actor.ActorRef, remoteActors []*actor.ActorRef) {
 	// system.NewChannelRef() // no need to answ
 	for _, ref := range peerActors {
-		fmt.Printf("init actor %v\n", ref.Counter)
-		system.Tell(ref, MInit{ref, peerActors})
-		system.Tell(ref, MSynchInit{})
+		// fmt.Printf("init local actor (%v:%v)\n", ref.Address, ref.Counter)
+		system.Tell(ref, MInit{ref, peerActors, remoteRef})
+		system.Tell(ref, MSyncInit{})
 	}
+	// fmt.Printf("init remote actor (%v:%v)\n", remoteRef.Address, remoteRef.Counter)
+	system.Tell(remoteRef, MInit{remoteRef, peerActors, nil})
+	for _, rRef := range remoteActors { // 
+		system.Tell(rRef, MRemoteContact{remoteActors})
+	}
+	system.Tell(remoteRef, MSyncInitRemote{})
 }
 
