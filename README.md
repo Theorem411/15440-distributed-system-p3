@@ -1,5 +1,5 @@
 p3
-== blah
+==
 
 This repository contains the starter code for project 3 (15-440, Fall 2022). It also contains
 the tests that we will use to grade your implementation, the CMUD game (`app` folder), and two simple kvserver/kvclient runners (`srunner` and `crunner`) that you might find useful for your own testing
